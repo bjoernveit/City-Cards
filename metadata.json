@@ -1,0 +1,6 @@
+{
+  "name": "City Cards",
+  "description": "A strategic card placement game where you build a city grid by overlapping cards with various element types.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
