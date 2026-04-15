@@ -88,7 +88,7 @@ export default function App() {
   };
 
   const getCardCost = (index: number) => {
-    if (stats.round === 1) return 0;
+    if (stats.phase === 1 && stats.round === 1) return 0;
     if (index === 0) return 2;
     if (index === 1) return 1;
     return 0;
@@ -124,9 +124,10 @@ export default function App() {
     
     setIsGameOver(false);
     setIsPointConversionOpen(false);
+    setMarketIndex(null);
     
-    // Generate fresh hand
-    const newHand = Array.from({ length: config.handSize }, () => generateCard(config.elementTypes));
+    // Generate fresh market
+    const newHand = Array.from({ length: config.marketSize }, () => generateCard(config.elementTypes));
     setHand(newHand);
     
     toast.success("Game restarted!");
@@ -340,49 +341,47 @@ export default function App() {
   };
 
   const processTurn = (currentBoard: BoardGrid) => {
-    setStats(prevStats => {
-      const currentTurnType = prevStats.currentTurnType;
-      const newStats = calculateStats(currentBoard, config.elementTypes, prevStats);
-      
-      // Simulate opponent: Remove a random card from the market
-      setHand(prevHand => {
-        if (prevHand.length === 0) return prevHand;
-        const randomIndex = Math.floor(Math.random() * prevHand.length);
-        const newHand = [...prevHand];
-        newHand.splice(randomIndex, 1);
-        
-        // Refill logic (will be handled by useEffect or manually here)
-        const currentMarketSize = newStats.round === 1 ? 3 : 4;
-        const needed = currentMarketSize - newHand.length;
-        const newCards = Array.from({ length: Math.max(0, needed) }, () => generateCard(config.elementTypes));
-        return [...newHand, ...newCards];
-      });
+    const currentTurnType = stats.currentTurnType;
+    const newStats = calculateStats(currentBoard, config.elementTypes, stats);
 
-      if (currentTurnType === 'points') {
-        // Points turn: Open point conversion UI
-        setIsPointConversionOpen(true);
-        setPointsToConvert(0);
-        return newStats;
-      } else {
-        // Resource production
-        const production = newStats.resources[currentTurnType].production;
-        newStats.resources[currentTurnType].stock += production;
-        
-        const logEntry = {
-          id: Math.random().toString(36).substr(2, 9),
-          phase: prevStats.phase,
-          round: prevStats.round,
-          turnType: currentTurnType,
-          type: 'production' as const,
-          message: `Produced ${production} ${currentTurnType} (Patch size: ${production})`
-        };
-        
-        newStats.logs = [...newStats.logs, logEntry];
-        toast.info(`Produced ${production} ${currentTurnType}!`);
-        
-        return getNextGameState(newStats);
-      }
+    // Simulate opponent: Remove a random card from the market
+    setHand(prevHand => {
+      if (prevHand.length === 0) return prevHand;
+      const randomIndex = Math.floor(Math.random() * prevHand.length);
+      const newHand = [...prevHand];
+      newHand.splice(randomIndex, 1);
+
+      // Refill logic
+      const currentMarketSize = newStats.round === 1 ? 3 : 4;
+      const needed = currentMarketSize - newHand.length;
+      const newCards = Array.from({ length: Math.max(0, needed) }, () => generateCard(config.elementTypes));
+      return [...newHand, ...newCards];
     });
+
+    if (currentTurnType === 'points') {
+      // Points turn: Open point conversion UI
+      setIsPointConversionOpen(true);
+      setPointsToConvert(0);
+      setStats(newStats);
+    } else {
+      // Resource production
+      const production = newStats.resources[currentTurnType].production;
+      newStats.resources[currentTurnType].stock += production;
+
+      const logEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        phase: stats.phase,
+        round: stats.round,
+        turnType: currentTurnType,
+        type: 'production' as const,
+        message: `Produced ${production} ${currentTurnType} (Patch size: ${production})`
+      };
+
+      newStats.logs = [...newStats.logs, logEntry];
+      toast.info(`Produced ${production} ${currentTurnType}!`);
+
+      setStats(getNextGameState(newStats));
+    }
   };
 
   const getNextGameState = (updatedStats: GameStats): GameStats => {
@@ -426,58 +425,54 @@ export default function App() {
   };
 
   const handleConvertPoints = () => {
-    setStats(prevStats => {
-      const currency = getPhaseCurrency(prevStats.phase);
-      const stock = prevStats.resources[currency].stock;
-      const capacity = prevStats.cityProduction.total;
-      const maxPossible = Math.min(stock, capacity);
-      const actualPoints = Math.min(pointsToConvert, maxPossible);
+    const currency = getPhaseCurrency(stats.phase);
+    const stock = stats.resources[currency].stock;
+    const capacity = stats.cityProduction.total;
+    const maxPossible = Math.min(stock, capacity);
+    const actualPoints = Math.min(pointsToConvert, maxPossible);
 
-      const updatedStats: GameStats = { 
-        ...prevStats,
-        resources: {
-          ...prevStats.resources,
-          [currency]: {
-            ...prevStats.resources[currency],
-            stock: stock - actualPoints
-          }
-        },
-        cityProduction: {
-          ...prevStats.cityProduction,
-          points: prevStats.cityProduction.points + actualPoints
+    const updatedStats: GameStats = { 
+      ...stats,
+      resources: {
+        ...stats.resources,
+        [currency]: {
+          ...stats.resources[currency],
+          stock: stock - actualPoints
         }
-      };
-      
-      const logEntry: LogEntry = {
-        id: Math.random().toString(36).substr(2, 9),
-        phase: prevStats.phase,
-        round: prevStats.round,
-        turnType: 'points',
-        type: 'conversion',
-        message: `Converted ${actualPoints} ${currency} to ${actualPoints} Points (Capacity used: ${actualPoints}/${capacity})`
-      };
-      
-      updatedStats.logs = [...updatedStats.logs, logEntry];
-      toast.success(`Converted ${actualPoints} ${currency} to points!`);
-      setIsPointConversionOpen(false);
-      return getNextGameState(updatedStats);
-    });
+      },
+      cityProduction: {
+        ...stats.cityProduction,
+        points: stats.cityProduction.points + actualPoints
+      }
+    };
+    
+    const logEntry: LogEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      phase: stats.phase,
+      round: stats.round,
+      turnType: 'points',
+      type: 'conversion',
+      message: `Converted ${actualPoints} ${currency} to ${actualPoints} Points (Capacity used: ${actualPoints}/${capacity})`
+    };
+    
+    updatedStats.logs = [...updatedStats.logs, logEntry];
+    toast.success(`Converted ${actualPoints} ${currency} to points!`);
+    setIsPointConversionOpen(false);
+    setStats(getNextGameState(updatedStats));
   };
 
   const skipConversion = () => {
     setIsPointConversionOpen(false);
-    setStats(prevStats => {
-      const logEntry = {
-        id: Math.random().toString(36).substr(2, 9),
-        phase: prevStats.phase,
-        round: prevStats.round,
-        turnType: 'points',
-        type: 'system' as const,
-        message: `Skipped point conversion`
-      };
-      const updatedStats = { ...prevStats, logs: [...prevStats.logs, logEntry] };
-      return getNextGameState(updatedStats);
-    });
+    const logEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      phase: stats.phase,
+      round: stats.round,
+      turnType: 'points',
+      type: 'system' as const,
+      message: `Skipped point conversion`
+    };
+    const updatedStats = { ...stats, logs: [...stats.logs, logEntry] };
+    setStats(getNextGameState(updatedStats));
   };
 
   const cancelPlacement = () => {
@@ -646,12 +641,6 @@ export default function App() {
           <span>DRAGGING: {draggingCardId || 'NONE'}</span>
           <span>HAND: {hand.length}</span>
         </div>
-        <button 
-          onClick={recallAll}
-          className="bg-red-900/50 hover:bg-red-800 px-2 py-0.5 rounded border border-red-800 text-red-200 pointer-events-auto transition-colors"
-        >
-          PANIC: RECALL ALL
-        </button>
       </div>
 
       <Toaster position="top-center" richColors />
