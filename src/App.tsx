@@ -31,18 +31,57 @@ const DEFAULT_CONFIG: GameConfig = {
   overlapRequired: 2,
 };
 
+const STORAGE_KEY = 'city-cards-save-state';
+
 export default function App() {
   const [config, setConfig] = useState<GameConfig>(DEFAULT_CONFIG);
+  
+  // Persistence Loading
+  const [isLoaded, setIsLoaded] = useState(false);
+
   const [hand, setHand] = useState<CardData[]>([]);
-  const [boardGrid, setBoardGrid] = useState<BoardGrid>(() => {
-    const startCard = createStartingCard();
-    return getBoardGridAfterPlacement(startCard, 0, 0, {});
-  });
+  const [boardGrid, setBoardGrid] = useState<BoardGrid>({});
+  const [stats, setStats] = useState<GameStats>(() => calculateStats({}, DEFAULT_CONFIG.elementTypes));
+
+  // Initialize from LocalStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.boardGrid) setBoardGrid(parsed.boardGrid);
+        if (parsed.hand) setHand(parsed.hand);
+        if (parsed.stats) setStats(parsed.stats);
+        if (parsed.config) setConfig(parsed.config);
+      } catch (e) {
+        console.error("Failed to load saved state", e);
+      }
+    } else {
+      // First time initialization
+      const startCard = createStartingCard();
+      const initialBoard = getBoardGridAfterPlacement(startCard, 0, 0, {});
+      setBoardGrid(initialBoard);
+      setStats(calculateStats(initialBoard, DEFAULT_CONFIG.elementTypes));
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Save to LocalStorage
+  useEffect(() => {
+    if (!isLoaded) return;
+    const stateToSave = {
+      boardGrid,
+      hand,
+      stats,
+      config
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+  }, [boardGrid, hand, stats, config, isLoaded]);
+
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [pendingPlacement, setPendingPlacement] = useState<PreviewData | null>(null);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [marketIndex, setMarketIndex] = useState<number | null>(null);
-  const [stats, setStats] = useState<GameStats>(() => calculateStats(boardGrid, DEFAULT_CONFIG.elementTypes));
   const [previewStats, setPreviewStats] = useState<GameStats | null>(null);
   const [isPointConversionOpen, setIsPointConversionOpen] = useState(false);
   const [pointsToConvert, setPointsToConvert] = useState(0);
@@ -69,11 +108,12 @@ export default function App() {
 
   // Refill market automatically
   useEffect(() => {
+    if (!isLoaded) return;
     const currentMarketSize = (stats.phase === 1 && stats.round === 1) ? 3 : 4;
     if (hand.length < currentMarketSize && !pendingPlacement && !draggingCardId) {
       refillHand();
     }
-  }, [hand.length, stats.round, stats.phase, pendingPlacement, draggingCardId]);
+  }, [hand.length, stats.round, stats.phase, pendingPlacement, draggingCardId, isLoaded]);
 
   const refillHand = () => {
     setHand(prev => {
@@ -130,6 +170,7 @@ export default function App() {
     const newHand = Array.from({ length: config.marketSize }, () => generateCard(config.elementTypes));
     setHand(newHand);
     
+    localStorage.removeItem(STORAGE_KEY);
     toast.success("Game restarted!");
   };
 
