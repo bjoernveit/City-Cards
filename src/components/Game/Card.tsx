@@ -8,6 +8,7 @@ import { RotateCw } from 'lucide-react';
 
 interface CardProps {
   card: CardData;
+  currentPhase?: number;
   isDraggable?: boolean;
   onDragStart?: (event: any, info: any) => void;
   onDrag?: (event: any, info: any) => void;
@@ -20,6 +21,7 @@ interface CardProps {
 
 export const GameCard: React.FC<CardProps> = ({ 
   card, 
+  currentPhase = 1,
   isDraggable = false, 
   onDragStart,
   onDrag,
@@ -31,6 +33,14 @@ export const GameCard: React.FC<CardProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  const isElementMuted = (type: string) => {
+    if (type === 'city' || type === 'nature' || type === 'desert') return false;
+    if (currentPhase === 1) return false;
+    if (currentPhase === 2) return type === 'wood';
+    if (currentPhase === 3) return type === 'wood' || type === 'bricks';
+    return false;
+  };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     if (onRotate) {
@@ -103,7 +113,7 @@ export const GameCard: React.FC<CardProps> = ({
           className="flex items-center justify-center bg-slate-900/50 rounded border border-slate-700/30"
         >
           <motion.div animate={{ rotate: -card.rotation }}>
-            <ElementIcon type={element.type} className="w-6 h-6" />
+            <ElementIcon type={element.type} className="w-6 h-6" isMuted={isElementMuted(element.type)} />
           </motion.div>
         </div>
       ))}

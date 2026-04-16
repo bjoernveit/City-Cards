@@ -9,6 +9,7 @@ interface HandProps {
   cards: CardData[];
   draggingCardId: string | null;
   preview: any;
+  currentPhase: number;
   onDragStart: (card: CardData, info: any) => void;
   onDrag: (card: CardData, info: any) => void;
   onDragEnd: (card: CardData, info: any) => void;
@@ -24,6 +25,7 @@ export const Hand: React.FC<HandProps> = ({
   cards, 
   draggingCardId,
   preview,
+  currentPhase,
   onDragStart, 
   onDrag, 
   onDragEnd, 
@@ -54,6 +56,7 @@ export const Hand: React.FC<HandProps> = ({
                 )}>
                   <GameCard 
                     card={card} 
+                    currentPhase={currentPhase}
                     isDraggable={canAfford} 
                     isHidden={draggingCardId === card.id && !!preview}
                     onDragStart={(_, info) => onDragStart(card, info)}

@@ -15,6 +15,7 @@ export interface PreviewData {
 interface BoardProps {
   grid: BoardGrid;
   cellSize: number;
+  currentPhase?: number;
   preview?: PreviewData | null;
   pendingPlacement?: PreviewData | null;
   draggingCardId?: string | null;
@@ -28,6 +29,7 @@ interface BoardProps {
 export const Board: React.FC<BoardProps> = ({ 
   grid, 
   cellSize, 
+  currentPhase = 1,
   preview, 
   pendingPlacement,
   draggingCardId,
@@ -46,6 +48,14 @@ export const Board: React.FC<BoardProps> = ({
   const minY = coords.length > 0 ? Math.min(...coords.map(c => c[1])) - 6 : -10;
   const maxY = coords.length > 0 ? Math.max(...coords.map(c => c[1])) + 6 : 10;
 
+  const isElementMuted = (type: string) => {
+    if (type === 'city' || type === 'nature' || type === 'desert') return false;
+    if (currentPhase === 1) return false;
+    if (currentPhase === 2) return type === 'wood';
+    if (currentPhase === 3) return type === 'wood' || type === 'bricks';
+    return false;
+  };
+
   const rows = [];
   for (let y = minY; y <= maxY; y++) {
     const cols = [];
@@ -60,7 +70,13 @@ export const Board: React.FC<BoardProps> = ({
           )}
           style={{ width: cellSize, height: cellSize }}
         >
-          {element && <ElementIcon type={element.type} className="w-1/2 h-1/2 opacity-80" />}
+          {element && (
+            <ElementIcon 
+              type={element.type} 
+              className="w-1/2 h-1/2 opacity-80" 
+              isMuted={isElementMuted(element.type)}
+            />
+          )}
         </div>
       );
     }
@@ -94,6 +110,7 @@ export const Board: React.FC<BoardProps> = ({
              )}>
                 <GameCard 
                   card={activePlacement.card} 
+                  currentPhase={currentPhase}
                   isDraggable={draggingCardId !== activePlacement.card.id} 
                   onDragStart={(_, info) => onDragStart?.(activePlacement.card, info)}
                   onDrag={(_, info) => onDrag?.(activePlacement.card, info)}

@@ -5,20 +5,23 @@ import { ElementType } from '@/src/types';
 interface ElementIconProps {
   type: ElementType;
   className?: string;
+  isMuted?: boolean;
 }
 
-export const ElementIcon: React.FC<ElementIconProps> = ({ type, className = "" }) => {
+export const ElementIcon: React.FC<ElementIconProps> = ({ type, className = "", isMuted = false }) => {
+  const muteClass = isMuted ? "opacity-60 grayscale-[0.5]" : "";
+  
   switch (type) {
     case 'city':
       return <Building2 className={`text-slate-400 ${className}`} />;
     case 'nature':
       return <Trees className={`text-emerald-400 ${className}`} />;
     case 'wood':
-      return <Box className={`text-amber-600 ${className}`} />;
+      return <Box className={`text-amber-600 ${muteClass} ${className}`} />;
     case 'bricks':
-      return <Box className={`text-red-600 ${className}`} />;
+      return <Box className={`text-red-600 ${muteClass} ${className}`} />;
     case 'steel':
-      return <Box className={`text-blue-400 ${className}`} />;
+      return <Box className={`text-blue-400 ${muteClass} ${className}`} />;
     case 'desert':
       return <Skull className={`text-yellow-700/40 ${className}`} />;
     default:

@@ -69,15 +69,15 @@ export default function App() {
 
   // Refill market automatically
   useEffect(() => {
-    const currentMarketSize = stats.round === 1 ? 3 : 4;
+    const currentMarketSize = (stats.phase === 1 && stats.round === 1) ? 3 : 4;
     if (hand.length < currentMarketSize && !pendingPlacement && !draggingCardId) {
       refillHand();
     }
-  }, [hand.length, stats.round, pendingPlacement, draggingCardId]);
+  }, [hand.length, stats.round, stats.phase, pendingPlacement, draggingCardId]);
 
   const refillHand = () => {
     setHand(prev => {
-      const currentMarketSize = stats.round === 1 ? 3 : 4;
+      const currentMarketSize = (stats.phase === 1 && stats.round === 1) ? 3 : 4;
       const currentHandCount = prev.length + (pendingPlacement ? 1 : 0);
       const needed = currentMarketSize - currentHandCount;
       if (needed <= 0) return prev;
@@ -352,7 +352,7 @@ export default function App() {
       newHand.splice(randomIndex, 1);
 
       // Refill logic
-      const currentMarketSize = newStats.round === 1 ? 3 : 4;
+      const currentMarketSize = (newStats.phase === 1 && newStats.round === 1) ? 3 : 4;
       const needed = currentMarketSize - newHand.length;
       const newCards = Array.from({ length: Math.max(0, needed) }, () => generateCard(config.elementTypes));
       return [...newHand, ...newCards];
@@ -574,6 +574,7 @@ export default function App() {
         <Board 
           grid={boardGrid} 
           cellSize={CELL_SIZE} 
+          currentPhase={stats.phase}
           preview={preview}
           pendingPlacement={pendingPlacement}
           draggingCardId={draggingCardId}
@@ -618,6 +619,7 @@ export default function App() {
           cards={hand} 
           draggingCardId={draggingCardId}
           preview={preview}
+          currentPhase={stats.phase}
           onDragStart={handleDragStart}
           onDrag={handleDrag}
           onDragEnd={handleDragEnd} 
