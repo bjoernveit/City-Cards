@@ -40,6 +40,10 @@ export const Hand: React.FC<HandProps> = ({
     <div className="w-full p-4 bg-slate-900/80 backdrop-blur-md border-t border-slate-800 flex flex-col items-center gap-2 z-50">
       <div className="flex items-center gap-4">
         <h3 className="text-slate-500 font-mono text-[10px] uppercase tracking-widest">Public Market</h3>
+        <div className="flex items-center gap-1 text-slate-700 font-mono text-[9px] uppercase tracking-wider">
+          <RefreshCw className="w-2.5 h-2.5" />
+          <span>Right Click Card to Rotate</span>
+        </div>
       </div>
       
       <div className="w-full overflow-x-auto scrollbar-hide py-2">

@@ -43,9 +43,13 @@ export const GameCard: React.FC<CardProps> = ({
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent rotation during drag to avoid browser race conditions and potential freezes
+    if (isDragging) return;
+
     if (onRotate) {
-      e.preventDefault();
-      e.stopPropagation();
       onRotate();
     }
   };

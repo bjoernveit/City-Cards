@@ -15,15 +15,16 @@ import { StatsDisplay } from './components/Game/StatsDisplay';
 import { ElementIcon } from './components/Game/ElementIcon';
 import { GameLog } from './components/Game/GameLog';
 import { HelpMenu } from './components/Game/HelpMenu';
-import { GameConfig, CardData, BoardGrid, ElementType } from './types';
+import { GameConfig, CardData, BoardGrid, ElementType, GameSession, LeaderboardEntry } from './types';
 import { generateCard, canPlaceCard, getBoardGridAfterPlacement, calculateStats, GameStats, createStartingCard, getPhaseCurrency, getTurnsInRound, LogEntry } from './gameUtils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CELL_SIZE, CARD_COLS, CARD_ROWS } from './constants';
-import { Check, X, Undo2, RotateCcw, Scale, HelpCircle } from 'lucide-react';
+import { Check, X, Undo2, RotateCcw, Scale, HelpCircle, ChevronLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Lobby } from './components/Game/Lobby';
 
 const DEFAULT_CONFIG: GameConfig = {
   marketSize: 3,
@@ -31,52 +32,157 @@ const DEFAULT_CONFIG: GameConfig = {
   overlapRequired: 2,
 };
 
-const STORAGE_KEY = 'city-cards-save-state';
+const SESSIONS_STORAGE_KEY = 'city-cards-sessions-v1';
+const LEADERBOARD_STORAGE_KEY = 'city-cards-leaderboard-v1';
+const PLAYER_NAME_KEY = 'city-cards-player-name-v1';
 
 export default function App() {
-  const [config, setConfig] = useState<GameConfig>(DEFAULT_CONFIG);
-  
-  // Persistence Loading
+  // Session Management
+  const [sessions, setSessions] = useState<GameSession[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [playerName, setPlayerName] = useState<string>("Architect");
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Current Game State (loaded from active session)
+  const [config, setConfig] = useState<GameConfig>(DEFAULT_CONFIG);
   const [hand, setHand] = useState<CardData[]>([]);
   const [boardGrid, setBoardGrid] = useState<BoardGrid>({});
   const [stats, setStats] = useState<GameStats>(() => calculateStats({}, DEFAULT_CONFIG.elementTypes));
+  const [isGameOver, setIsGameOver] = useState(false);
+  
+  // Undo History
+  const [history, setHistory] = useState<Array<{
+    boardGrid: BoardGrid;
+    hand: CardData[];
+    stats: GameStats;
+  }>>([]);
 
-  // Initialize from LocalStorage
+  // Initialize Sessions and Leaderboard from LocalStorage
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    const savedSessions = localStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (savedSessions) {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed.boardGrid) setBoardGrid(parsed.boardGrid);
-        if (parsed.hand) setHand(parsed.hand);
-        if (parsed.stats) setStats(parsed.stats);
-        if (parsed.config) setConfig(parsed.config);
+        setSessions(JSON.parse(savedSessions));
       } catch (e) {
-        console.error("Failed to load saved state", e);
+        console.error("Failed to load sessions", e);
       }
-    } else {
-      // First time initialization
-      const startCard = createStartingCard();
-      const initialBoard = getBoardGridAfterPlacement(startCard, 0, 0, {});
-      setBoardGrid(initialBoard);
-      setStats(calculateStats(initialBoard, DEFAULT_CONFIG.elementTypes));
     }
+
+    const savedLeaderboard = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
+    if (savedLeaderboard) {
+      try {
+        setLeaderboard(JSON.parse(savedLeaderboard));
+      } catch (e) {
+        console.error("Failed to load leaderboard", e);
+      }
+    }
+
+    const savedPlayerName = localStorage.getItem(PLAYER_NAME_KEY);
+    if (savedPlayerName) {
+      setPlayerName(savedPlayerName);
+    }
+
     setIsLoaded(true);
   }, []);
 
-  // Save to LocalStorage
+  // Sync Current State back to Sessions
   useEffect(() => {
-    if (!isLoaded) return;
-    const stateToSave = {
-      boardGrid,
-      hand,
-      stats,
-      config
+    if (!isLoaded || !activeSessionId) return;
+
+    setSessions(prev => {
+      const updated = prev.map(s => {
+        if (s.id === activeSessionId) {
+          return {
+            ...s,
+            lastPlayed: Date.now(),
+            isGameOver,
+            state: {
+              boardGrid,
+              hand,
+              stats,
+              config
+            }
+          };
+        }
+        return s;
+      });
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, [boardGrid, hand, stats, config, isGameOver, activeSessionId, isLoaded]);
+
+  // Session Handlers
+  const startNewGame = () => {
+    const startCard = createStartingCard();
+    const initialBoard = getBoardGridAfterPlacement(startCard, 0, 0, {});
+    const initialStats = calculateStats(initialBoard, DEFAULT_CONFIG.elementTypes);
+    initialStats.logs = [{
+      id: 'start',
+      phase: 1,
+      round: 1,
+      turnType: 'system',
+      type: 'system',
+      message: 'Project initiated. Phase 1 structural foundation set.'
+    }];
+
+    const newId = Math.random().toString(36).substring(2, 11);
+    const newSession: GameSession = {
+      id: newId,
+      name: `City Project ${sessions.length + 1}`,
+      lastPlayed: Date.now(),
+      isGameOver: false,
+      state: {
+        boardGrid: initialBoard,
+        hand: Array.from({ length: DEFAULT_CONFIG.marketSize }, () => generateCard(DEFAULT_CONFIG.elementTypes)),
+        stats: initialStats,
+        config: DEFAULT_CONFIG
+      }
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-  }, [boardGrid, hand, stats, config, isLoaded]);
+
+    setSessions(prev => [newSession, ...prev]);
+    loadSession(newSession);
+  };
+
+  const loadSession = (session: GameSession) => {
+    setBoardGrid(session.state.boardGrid);
+    setHand(session.state.hand);
+    setStats(session.state.stats);
+    setConfig(session.state.config);
+    setIsGameOver(session.isGameOver);
+    setActiveSessionId(session.id);
+    setHistory([]); // Reset history on session load
+  };
+
+  const deleteSession = (id: string) => {
+    setSessions(prev => {
+      const filtered = prev.filter(s => s.id !== id);
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(filtered));
+      return filtered;
+    });
+    if (activeSessionId === id) setActiveSessionId(null);
+  };
+
+  const goBackToLobby = () => {
+    setActiveSessionId(null);
+  };
+
+  const handleUpdatePlayerName = (name: string) => {
+    setPlayerName(name);
+    localStorage.setItem(PLAYER_NAME_KEY, name);
+  };
+
+  const undoLastMove = () => {
+    if (history.length === 0) return;
+    
+    const lastState = history[history.length - 1];
+    setBoardGrid(lastState.boardGrid);
+    setHand(lastState.hand);
+    setStats(lastState.stats);
+    setHistory(prev => prev.slice(0, -1));
+    
+    toast.info("Move undone");
+  };
 
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [pendingPlacement, setPendingPlacement] = useState<PreviewData | null>(null);
@@ -85,7 +191,6 @@ export default function App() {
   const [previewStats, setPreviewStats] = useState<GameStats | null>(null);
   const [isPointConversionOpen, setIsPointConversionOpen] = useState(false);
   const [pointsToConvert, setPointsToConvert] = useState(0);
-  const [isGameOver, setIsGameOver] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   
   const boardRef = useRef<HTMLDivElement>(null);
@@ -158,7 +263,7 @@ export default function App() {
       round: 1,
       turnType: 'system',
       type: 'system',
-      message: 'New game started! Phase 1 begins.'
+      message: 'Development reset. Starting fresh city plan.'
     }];
     setStats(initialStats);
     
@@ -170,8 +275,7 @@ export default function App() {
     const newHand = Array.from({ length: config.marketSize }, () => generateCard(config.elementTypes));
     setHand(newHand);
     
-    localStorage.removeItem(STORAGE_KEY);
-    toast.success("Game restarted!");
+    toast.success("Project reset!");
   };
 
   const getGridCoords = (card: CardData, info: any) => {
@@ -373,6 +477,19 @@ export default function App() {
     }
 
     const newBoard = getBoardGridAfterPlacement(pendingPlacement.card, pendingPlacement.x, pendingPlacement.y, boardGrid);
+    
+    // Save to history before updating state
+    const previousHand = [...hand];
+    if (marketIndex !== null && marketIndex <= previousHand.length) {
+      previousHand.splice(marketIndex, 0, pendingPlacement.card);
+    }
+    
+    setHistory(prev => [...prev, {
+      boardGrid: { ...boardGrid },
+      hand: previousHand,
+      stats: { ...stats }
+    }].slice(-10)); // Keep last 10 moves
+
     setBoardGrid(newBoard);
     setPendingPlacement(null);
     setMarketIndex(null);
@@ -450,8 +567,31 @@ export default function App() {
           nextTurnType = getTurnsInRound(nextPhase)[0];
           toast.success(`Phase ${nextPhase} begins!`);
         } else {
-          // Game Over
+          // Game Over - Record Highscore
           setIsGameOver(true);
+          
+          if (activeSessionId) {
+            const currentSession = sessions.find(s => s.id === activeSessionId);
+            const score = updatedStats.cityProduction.points;
+            
+            const newEntry: LeaderboardEntry = {
+              id: Math.random().toString(36).substring(2, 11),
+              sessionId: activeSessionId,
+              cityName: currentSession?.name || "Unknown City",
+              playerName: playerName,
+              score: score,
+              date: Date.now()
+            };
+
+            setLeaderboard(prev => {
+              const updated = [...prev, newEntry]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10); // Keep top 10
+              localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(updated));
+              return updated;
+            });
+          }
+
           return { ...updatedStats, currentTurnType: 'points' };
         }
       }
@@ -555,12 +695,38 @@ export default function App() {
     toast.info("Card recalled to market.");
   };
 
+  if (!activeSessionId) {
+    return (
+      <Lobby 
+        sessions={sessions} 
+        leaderboard={leaderboard}
+        playerName={playerName}
+        onUpdatePlayerName={handleUpdatePlayerName}
+        onStartNew={startNewGame} 
+        onJoinSession={(id) => loadSession(sessions.find(s => s.id === id)!)}
+        onDeleteSession={deleteSession}
+      />
+    );
+  }
+
   return (
-    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
-      <header className="p-3 md:p-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/50 backdrop-blur-sm z-40 shrink-0">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tighter text-slate-200">CITY CARDS</h1>
-          <p className="hidden md:block text-xs text-slate-500 font-mono uppercase tracking-widest">Proof of Concept v0.2</p>
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      <header className="shrink-0 p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md flex items-center justify-between z-50">
+        <div className="flex items-center gap-4">
+          <Button 
+            onClick={goBackToLobby}
+            variant="ghost" 
+            size="sm"
+            className="text-slate-400 hover:text-white"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" /> Lobby
+          </Button>
+          <div className="flex flex-col">
+            <h1 className="text-xl md:text-2xl font-black tracking-tighter text-white leading-none">CITY <span className="text-slate-500">CARDS</span></h1>
+            <span className="text-[10px] font-mono font-bold text-emerald-500 uppercase tracking-widest leading-none mt-1">
+              {sessions.find(s => s.id === activeSessionId)?.name}
+            </span>
+          </div>
         </div>
         
         <div className="flex items-center gap-3 md:gap-6">
@@ -573,6 +739,18 @@ export default function App() {
             <HelpCircle className="w-3.5 h-3.5 md:w-4 h-4" />
             <span className="hidden sm:inline">How to Play</span>
             <span className="sm:hidden">Help</span>
+          </Button>
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={undoLastMove}
+            disabled={history.length === 0}
+            className="bg-slate-900/50 border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-amber-400 gap-2 h-8 md:h-9 disabled:opacity-30 disabled:hover:text-slate-400"
+          >
+            <Undo2 className="w-3.5 h-3.5 md:w-4 h-4" />
+            <span className="hidden sm:inline">Undo Move</span>
+            <span className="sm:hidden">Undo</span>
           </Button>
 
           <Button 
@@ -602,11 +780,11 @@ export default function App() {
         ref={boardRef}
         onContextMenu={(e) => {
           e.preventDefault();
-          // Rotate whatever is currently active
-          if (draggingCardId) {
-            const card = hand.find(c => c.id === draggingCardId);
-            if (card) handleRotate(card);
-          } else if (pendingPlacement) {
+          // DO NOT allow rotation via right-click during dragging as it causes browser race conditions
+          // where the mouse-up event is consumed by the context menu logic, leading to detached drag states.
+          if (draggingCardId) return;
+
+          if (pendingPlacement) {
             handleRotate(pendingPlacement.card);
           }
         }}
@@ -642,14 +820,21 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-64 md:bottom-72 left-1/2 -translate-x-1/2 flex gap-3 z-50"
+              className="fixed bottom-64 md:bottom-72 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 z-50"
             >
-              <Button onClick={approvePlacement} className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-lg shadow-emerald-900/20">
-                <Check className="w-4 h-4" /> Approve
-              </Button>
-              <Button onClick={cancelPlacement} variant="destructive" className="gap-2 shadow-lg shadow-red-900/20">
-                <Undo2 className="w-4 h-4" /> Pick Up
-              </Button>
+              <div className="flex gap-3">
+                <Button onClick={approvePlacement} className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-lg shadow-emerald-900/20 px-8 py-6 text-lg font-bold">
+                  <Check className="w-5 h-5" /> Approve Build
+                </Button>
+                <Button onClick={cancelPlacement} variant="destructive" className="gap-2 shadow-lg shadow-red-900/20 px-8 py-6 text-lg font-bold">
+                  <Undo2 className="w-5 h-5" /> Pick Up
+                </Button>
+              </div>
+              
+              <div className="bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-slate-700/50 flex items-center gap-2 text-xs font-mono text-slate-400">
+                <RefreshCw className="w-3 h-3 text-slate-500 animate-spin-slow" />
+                <span><span className="text-slate-200">Right Click</span> anywhere to rotate piece</span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -796,12 +981,21 @@ export default function App() {
                 ))}
               </div>
 
-              <Button 
-                onClick={restartGame}
-                className="w-full py-8 text-xl font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-900/20"
-              >
-                PLAY AGAIN
-              </Button>
+              <div className="flex flex-col gap-3">
+                <Button 
+                  onClick={restartGame}
+                  className="w-full py-8 text-xl font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-900/20"
+                >
+                  RESTART PROJECT
+                </Button>
+                <Button 
+                  onClick={goBackToLobby}
+                  variant="ghost"
+                  className="w-full py-4 text-slate-400 hover:text-white"
+                >
+                  BACK TO LOBBY
+                </Button>
+              </div>
             </motion.div>
           </motion.div>
         )}

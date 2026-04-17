@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, HelpCircle, Info, Layers, RefreshCw, Scale, Trophy } from 'lucide-react';
+import { X, HelpCircle, Info, Layers, RefreshCw, Scale, Trophy, MousePointer2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface HelpMenuProps {
@@ -109,6 +109,24 @@ export const HelpMenu: React.FC<HelpMenuProps> = ({ isOpen, onClose }) => {
                     <span>Cards must overlap at least <span className="text-white font-bold">2 tiles</span> of existing cards.</span>
                   </li>
                 </ul>
+              </section>
+
+              {/* Controls */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <MousePointer2 className="w-4 h-4" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider">Interface Controls</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-400 text-sm">
+                  <div className="flex justify-between items-center bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                    <span>Rotate Card</span>
+                    <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">RIGHT CLICK</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                    <span>Cancel/Exit</span>
+                    <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">ESC</span>
+                  </div>
+                </div>
               </section>
 
               {/* Points */}
